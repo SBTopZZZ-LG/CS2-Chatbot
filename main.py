@@ -1,7 +1,9 @@
 import asyncio
 import json
 import random
+import threading
 import traceback
+from typing import Optional
 
 import pydirectinput
 import requests
@@ -10,6 +12,7 @@ from nicegui import ui, run
 from numerize import numerize
 
 from util import *
+from settings_loader import FileSettingsLoader, SettingsLoader
 
 
 current_version = 'v1.2.0'
@@ -28,6 +31,9 @@ current_char = None
 
 tgt = None
 chat = None
+
+settings_loader: SettingsLoader = FileSettingsLoader(settings_file)
+settings_loader.touch()
 
 # Game
 cs_path = get_cs_path() + '\\game\\csgo\\'
@@ -58,7 +64,8 @@ class ToggleButton(ui.button):
             tabs.set_value('Settings')
             self._state = not self._state
         elif not current_char:
-            ui.notify('Please select a character to use first!', type='negative')
+            ui.notify('Please select a character to use first!',
+                      type='negative')
             tabs.set_value('Characters')
             self._state = not self._state
         elif self._state:
@@ -96,20 +103,22 @@ async def handle_chat():
         message = data[1]
 
         if mimic_mode_switch.value:
-            response_message = ''.join([char.upper() if random.randint(0, 1) else char.lower() for char in message])
+            response_message = ''.join([char.upper() if random.randint(
+                0, 1) else char.lower() for char in message])
         else:
             data = await run.cpu_bound(client.chat.send_message,
-                chat['external_id'], tgt, message
-            )
+                                       chat['external_id'], tgt, message
+                                       )
 
-            #name = data['src_char']['participant']['name']
+            # name = data['src_char']['participant']['name']
             response_message = data['replies'][0]['text']
 
         # Clean string
         text = response_message.replace('"', "''").replace('\n', ' ')
 
         # Chunk our message in order to send everything
-        texts = [text[i:i + chat_char_limit] for i in range(0, len(text), chat_char_limit)]
+        texts = [text[i:i + chat_char_limit]
+                 for i in range(0, len(text), chat_char_limit)]
 
         for text in texts:
             with open(exec_dir, 'w', encoding='utf-8') as f:
@@ -132,39 +141,45 @@ def swap_theme(e):
 
 
 def load_settings():
-    try:
-        with open(settings_file) as f:
-            settings = json.load(f)
-            if settings['token']:
-                cai_token.value = settings['token']
-    except FileNotFoundError:
-        print('No settings file, creating one.')
-        with open(settings_file, 'w') as f:
-            json.dump({'token': ''}, f)
-    except json.JSONDecodeError:
-        print('Invalid JSON data, recreating file.')
-        with open(settings_file, 'w') as f:
-            json.dump({'token': ''}, f)
+    e = settings_loader.load()
+    if e is not None:
+        ui.notify(e, html=False, close_button='Close',
+                  timeout=0, type='negative')
+        return
+
+    cai_token.value = settings_loader.get_settings().get_cai_settings().get_token()
+
+
+def save_settings():
+    e = settings_loader.save()
+    if e is not None:
+        ui.notify(e, html=False, close_button='Close',
+                  timeout=0, type='negative')
 
 
 def check_if_updated():
     try:
-        data = requests.get('https://api.github.com/repositories/708269905/releases').json()
+        data = requests.get(
+            'https://api.github.com/repositories/708269905/releases').json()
         recent_tag = data[0]['tag_name']
 
         if recent_tag != current_version:
-            ui.notify('A new update is available, click <a style="color: #ec4899" href="https://github.com/skelcium/CS2-Chatbot/releases" target="_blank">here</a> to download it.', html=True, close_button='Close', timeout=20000)
+            ui.notify('A new update is available, click <a style="color: #ec4899" href="https://github.com/skelcium/CS2-Chatbot/releases" target="_blank">here</a> to download it.',
+                      html=True, close_button='Close', timeout=20000)
     except:
         ui.notify("Failed to check if up-to-date.")
 
+
 def check_if_admin():
     if not is_running_as_admin():
-        ui.notify('Not running as admin, some features <b>may not work</b>.', html=True, close_button='Close', timeout=0, type='warning')
+        ui.notify('Not running as admin, some features <b>may not work</b>.',
+                  html=True, close_button='Close', timeout=0, type='warning')
 
 
 def check_if_condebug():
     if not is_condebug_in_steam_args():
-        ui.notify('Could not find <b>-condebug</b> in Steam CS2 launch arguments.', html=True, close_button='Close', timeout=0, type='warning')
+        ui.notify('Could not find <b>-condebug</b> in Steam CS2 launch arguments.',
+                  html=True, close_button='Close', timeout=0, type='warning')
 
 
 def select_character(char):
@@ -187,11 +202,13 @@ def select_character(char):
     current_char = char
 
     if char['avatar_file_name']:
-        avatar = 'https://characterai.io/i/80/static/avatars/' + char['avatar_file_name']
+        avatar = 'https://characterai.io/i/80/static/avatars/' + \
+            char['avatar_file_name']
     else:
         avatar = 'https://characterai.io/i/80/static/topic-pics/cai-light-on-dark.jpg'
 
-    ui.notify(f'Selected <b>{char["participant__name"]}</b> as your character.', avatar=avatar, color='pink', html=True)
+    ui.notify(f'Selected <b>{
+              char["participant__name"]}</b> as your character.', avatar=avatar, color='pink', html=True)
     char_id = char['external_id']
 
     # Save tgt and history_external_id
@@ -209,8 +226,22 @@ def select_character(char):
         tgt = participants[1]['user']['username']
 
 
+set_token_save_settings_timer: Optional[threading.Timer] = None
+
+
+def set_token_save_settings_timer_handler(token: str):
+    global set_token_save_settings_timer
+
+    print("Savingf now!")
+
+    settings_loader.get_settings().get_cai_settings().set_token(token)
+    settings_loader.save()
+
+    set_token_save_settings_timer = None
+
+
 async def set_token(token, overwrite=False):
-    global client
+    global client, set_token_save_settings_timer
 
     client = PyCAI(token)
     username = client.user.info()['user']['user']['username']
@@ -222,8 +253,11 @@ async def set_token(token, overwrite=False):
 
         # Save correct token
         if overwrite:
-            with open(settings_file, 'w') as f:
-                json.dump({'token': token}, f)
+            if set_token_save_settings_timer is not None:
+                set_token_save_settings_timer.cancel()
+            set_token_save_settings_timer = threading.Timer(
+                2, set_token_save_settings_timer_handler, (token,))
+            set_token_save_settings_timer.start()
 
         await search(query_type='Trending')
 
@@ -256,7 +290,8 @@ async def search(query_type='Search'):
         for character in characters:
             name = character['participant__name']
             if character['avatar_file_name']:
-                avatar = 'https://characterai.io/i/80/static/avatars/' + character['avatar_file_name']
+                avatar = 'https://characterai.io/i/80/static/avatars/' + \
+                    character['avatar_file_name']
             else:
                 avatar = 'https://characterai.io/i/80/static/topic-pics/cai-light-on-dark.jpg'
 
@@ -266,13 +301,16 @@ async def search(query_type='Search'):
                         ui.image(avatar).classes('h-32')
                         with ui.row().classes('absolute right-2 top-1'):
                             if 'participant__num_interactions' in character:
-                                interaction_label = f'🗨️{numerize.numerize(character["participant__num_interactions"])}'
+                                interaction_label = f'🗨️{numerize.numerize(
+                                    character["participant__num_interactions"])}'
                             else:
                                 interaction_label = ''
 
-                            ui.label(interaction_label).classes('text-center drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,1)]')
+                            ui.label(interaction_label).classes(
+                                'text-center drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,1)]')
                         with ui.card_section().classes('h-6 w-full font-bold'):
-                            ui.label(name).classes('drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] break-words')
+                            ui.label(name).classes(
+                                'drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] break-words')
 
         character_count_badge.text = len(characters)
 
@@ -309,10 +347,13 @@ with ui.splitter(value=16).classes('w-full h-screen').props(':limits="[16, 32]"'
             settings = ui.tab('Settings', icon='settings')
 
         with ui.row().classes('p-2 mx-auto'):
-            toggle_active = ToggleButton(icon='power_settings_new').classes('w-11 animate-pulse')
+            toggle_active = ToggleButton(
+                icon='power_settings_new').classes('w-11 animate-pulse')
             with toggle_active:
-                status_badge = ui.badge('OFF').props('floating').classes('bg-red rounded')
-            reset_button = ui.button(icon='restart_alt').classes('w-11 outline').on('click',lambda e: select_character(current_char))
+                status_badge = ui.badge('OFF').props(
+                    'floating').classes('bg-red rounded')
+            reset_button = ui.button(icon='restart_alt').classes(
+                'w-11 outline').on('click', lambda e: select_character(current_char))
             reset_button.disable()
 
             with reset_button:
@@ -322,9 +363,12 @@ with ui.splitter(value=16).classes('w-full h-screen').props(':limits="[16, 32]"'
         with ui.tab_panels(tabs, value=characters).props('vertical').classes('w-full h-full'):
             with ui.tab_panel(characters).classes('overflow-x-hidden'):
                 with ui.row().classes('flex items-center w-full'):
-                    character_input = ui.input('Character').on('keypress.enter', search).classes('w-52')
-                    search_btn = ui.button(on_click=search, icon='search').classes('outline mt-auto')
-                    character_select = ui.select(['Recommended', 'Trending', 'Recent'], value='Trending', on_change=lambda e: search(query_type=e.value)).classes('ml-auto').props('filled')
+                    character_input = ui.input('Character').on(
+                        'keypress.enter', search).classes('w-52')
+                    search_btn = ui.button(
+                        on_click=search, icon='search').classes('outline mt-auto')
+                    character_select = ui.select(['Recommended', 'Trending', 'Recent'], value='Trending', on_change=lambda e: search(
+                        query_type=e.value)).classes('ml-auto').props('filled')
 
                 ui.separator()
                 results = ui.row().classes('justify-center')
@@ -340,21 +384,25 @@ with ui.splitter(value=16).classes('w-full h-screen').props(':limits="[16, 32]"'
                     with ui.card().tight().classes('shadow-sm shadow-black'):
                         with ui.card_section():
                             ui.badge('API')
-                            cai_token = ui.input(label='C.AI Token', password=True, on_change=lambda e: set_token(e.value, overwrite=True))
+                            cai_token = ui.input(label='C.AI Token', password=True, on_change=lambda e: set_token(
+                                e.value, overwrite=True))
 
                             with ui.row().classes('mt-5'):
-                                ui.button(icon='help', on_click=dialog_help_api.open).props('rounded')
+                                ui.button(icon='help', on_click=dialog_help_api.open).props(
+                                    'rounded')
 
                     with ui.card().tight().classes('shadow-sm shadow-black'):
                         with ui.card_section():
                             ui.badge('Appearance')
                             ui.html('<br>')
 
-                            ui.switch('Dark Theme', on_change=swap_theme, value=True)
+                            ui.switch('Dark Theme',
+                                      on_change=swap_theme, value=True)
 
-                            with ui.row().classes('mt-3') :
+                            with ui.row().classes('mt-3'):
                                 with ui.button(icon='colorize').props('rounded') as button:
-                                    ui.color_picker(on_pick=lambda e: ui.colors(primary=e.color))
+                                    ui.color_picker(
+                                        on_pick=lambda e: ui.colors(primary=e.color))
 
                     with ui.card().tight().classes('shadow-sm shadow-black'):
                         with ui.card_section():
@@ -362,14 +410,17 @@ with ui.splitter(value=16).classes('w-full h-screen').props(':limits="[16, 32]"'
                             ui.html('<br>')
 
                             mimic_mode_switch = ui.switch('Mimic Mode')
-                            human_mode_switch = ui.switch('Humanized Typing Speed')
+                            human_mode_switch = ui.switch(
+                                'Humanized Typing Speed')
 
                             with mimic_mode_switch:
-                                ui.tooltip('Repeat messages with randomly applied capitalization, JuSt LikE ThiS!')
+                                ui.tooltip(
+                                    'Repeat messages with randomly applied capitalization, JuSt LikE ThiS!')
 
 check_if_updated()
 check_if_admin()
 check_if_condebug()
 load_settings()
 
-ui.run(native=True, show=False, window_size=(840, 600), title='CS2 Chatbot', reload=False, show_welcome_message=False)
+ui.run(native=True, show=False, window_size=(840, 600),
+       title='CS2 Chatbot', reload=False, show_welcome_message=False)

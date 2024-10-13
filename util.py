@@ -1,12 +1,16 @@
-import os, vdf, winreg
+import os
+import vdf
+import winreg
 from ctypes import wintypes, windll, create_unicode_buffer, byref, POINTER, sizeof
 
 # Scary handle technology (doesn't touch the game though, trust).
 windll.advapi32.OpenProcessToken.restype = wintypes.BOOL
-windll.advapi32.OpenProcessToken.argtypes = [wintypes.HANDLE, wintypes.DWORD, POINTER(wintypes.HANDLE)]
+windll.advapi32.OpenProcessToken.argtypes = [
+    wintypes.HANDLE, wintypes.DWORD, POINTER(wintypes.HANDLE)]
 
 windll.advapi32.GetTokenInformation.restype = wintypes.BOOL
-windll.advapi32.GetTokenInformation.argtypes = [wintypes.HANDLE, wintypes.DWORD, POINTER(None), wintypes.DWORD, POINTER(wintypes.DWORD)]
+windll.advapi32.GetTokenInformation.argtypes = [
+    wintypes.HANDLE, wintypes.DWORD, POINTER(None), wintypes.DWORD, POINTER(wintypes.DWORD)]
 
 windll.kernel32.CloseHandle.restype = wintypes.BOOL
 windll.kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
@@ -51,7 +55,8 @@ def is_running_as_admin():
 
 def get_steam_path():
     try:
-        hKey = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 'SOFTWARE\\Wow6432Node\\Valve\\Steam')
+        hKey = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                              'SOFTWARE\\Wow6432Node\\Valve\\Steam')
         path = winreg.QueryValueEx(hKey, 'InstallPath')[0]
         winreg.CloseKey(hKey)
         return str(path)
@@ -61,7 +66,8 @@ def get_steam_path():
 
 def get_cs_path():
     try:
-        hKey = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, 'SOFTWARE\\WOW6432Node\\Valve\\cs2')
+        hKey = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                              'SOFTWARE\\WOW6432Node\\Valve\\cs2')
         path = winreg.QueryValueEx(hKey, 'installpath')[0]
         winreg.CloseKey(hKey)
         return str(path)
@@ -71,7 +77,8 @@ def get_cs_path():
 
 def get_current_user_id():
     try:
-        hKey = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'SOFTWARE\\Valve\\Steam\\ActiveProcess')
+        hKey = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                              'SOFTWARE\\Valve\\Steam\\ActiveProcess')
         id = winreg.QueryValueEx(hKey, 'ActiveUser')[0]
         winreg.CloseKey(hKey)
         return id
@@ -81,7 +88,8 @@ def get_current_user_id():
 
 def get_last_name_used():
     try:
-        hKey = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'SOFTWARE\\Valve\\Steam')
+        hKey = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                              'SOFTWARE\\Valve\\Steam')
         name = winreg.QueryValueEx(hKey, 'LastGameNameUsed')[0]
         winreg.CloseKey(hKey)
         return name
@@ -98,7 +106,8 @@ def is_condebug_in_steam_args():
     if user_id == 0:
         return False
 
-    cfg_path = steam_path + f"\\userdata\\{str(user_id)}\\config\\localconfig.vdf"
+    cfg_path = steam_path + \
+        f"\\userdata\\{str(user_id)}\\config\\localconfig.vdf"
     if not os.path.exists(cfg_path):
         return False
 

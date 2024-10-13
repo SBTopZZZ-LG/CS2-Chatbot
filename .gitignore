@@ -1,6 +1,14 @@
 # Created by https://www.toptal.com/developers/gitignore/api/python,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,visualstudiocode
 
+### Application ###
+
+## Chatbot settings ##
+chatbot_settings.json
+##
+
+###
+
 ### Visual Studio Code ###
 .vscode
 ###

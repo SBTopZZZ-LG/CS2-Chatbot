@@ -17,13 +17,14 @@ Automatically respond to in-game messages in Counter-Strike 2
 ## I can't find my API token
 
 1. Log into [character.ai](https://character.ai/) and make sure you're signed in
-2. Open your browser's Developer Tools (F12)
-3. Go to the **Application** tab (Chrome) or **Storage** tab (Firefox)
-4. Click on **Cookies** in the left sidebar
-5. Select the Character.AI domain from the list
-6. Look for a cookie named `HTTP_AUTHORIZATION`
-7. Copy the value after "Token " (the long string of letters and numbers)
-8. That's your API token!
+2. Select any character on the website to open a new chat
+3. Open your browser's Developer Tools (F12)
+4. Go to the **Application** tab (Chrome) or **Storage** tab (Firefox)
+5. Click on **Cookies** in the left sidebar
+6. Select the Character.AI domain from the list
+7. Look for a cookie named `HTTP_AUTHORIZATION`
+8. Copy the value after "Token " (the long string of letters and numbers)
+9. That's your API token!
 
 ## Building from Source (Windows Only)
 
